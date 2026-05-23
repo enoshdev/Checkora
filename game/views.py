@@ -545,6 +545,7 @@ def register_view(request):
 
             if settings.DEBUG and missing_email_credentials:
                 print(f"[Checkora] Development registration OTP for {user.email}: {otp}")
+                request.session['registration_otp_created_at'] = time.time()
                 return redirect('verify_otp')
 
             # Send Email
@@ -588,6 +589,7 @@ def register_view(request):
                     fail_silently=False,
                     html_message=html_message
                 )
+                request.session['registration_otp_created_at'] = time.time()
                 return redirect('verify_otp')
             except (SMTPException, BadHeaderError, OSError):
                 # If email fails, delete the user so they can try again
@@ -621,6 +623,11 @@ def verify_otp(request):
         # Verify hash
         entered_otp_hash = hashlib.sha256(f"{entered_otp}:{settings.SECRET_KEY}".encode()).hexdigest()
 
+        otp_created_at = request.session.get('registration_otp_created_at')
+        if not otp_created_at or time.time() - otp_created_at > 600:
+            messages.error(request, 'OTP has expired. Please request a new one.')
+            return redirect('verify_otp')
+        
         if entered_otp_hash == stored_otp_hash:
             try:
                 user = User.objects.get(id=user_id)

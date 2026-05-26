@@ -269,6 +269,7 @@ def get_state(request):
         elapsed = time.time() - game.last_ts
         if elapsed > 10 and not game.paused:
             game.paused = True  # pause without deducting lost time
+            game.pause_reason = 'auto'
         else:
             game.update_clock()
 
@@ -281,6 +282,7 @@ def get_state(request):
         'white_time': game.white_time,
         'black_time': game.black_time,
         'paused': game.paused,
+        'pause_reason': getattr(game, 'pause_reason', 'manual'),
         'move_history': game.move_history,
         'captured_pieces': game.captured,
         'mode': game.mode,
@@ -311,6 +313,7 @@ def set_pause(request):
     if pause and not game.paused:
         game.update_clock()
     game.paused = pause
+    game.pause_reason = 'manual'
     game.last_ts = time.time()
 
     request.session['game'] = game.to_dict()
@@ -318,6 +321,7 @@ def set_pause(request):
 
     return JsonResponse({
         'paused': game.paused,
+        'pause_reason': game.pause_reason,
         'white_time': game.white_time,
         'black_time': game.black_time,
     })
@@ -444,6 +448,9 @@ def resign_game(request):
         return JsonResponse({'valid': False, 'message': 'No active game.'}, status=400)
 
     game = ChessGame.from_dict(game_data)
+
+    if game.game_status != 'active':
+        return JsonResponse({'valid': False, 'message': 'No active game.'}, status=400)
 
     resigning_player = game.player_color if game.mode == 'ai' else game.current_turn
     winner = 'black' if resigning_player == 'white' else 'white'
